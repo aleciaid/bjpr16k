@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { Copy, Check, Download, FileDown } from 'lucide-react';
 
-export default function TextPreview({ text, onDownloadTxt, onDownloadPdf }) {
+export default function TextPreview({
+  text,
+  onDownloadTxt,
+  onDownloadPdf,
+  onBulkDownloadPdf,
+  canBulkDownloadPdf,
+}) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -38,6 +44,18 @@ export default function TextPreview({ text, onDownloadTxt, onDownloadPdf }) {
             {copied ? <Check size={12} /> : <Copy size={12} />}
             {copied ? 'Tersalin!' : 'Copy'}
           </button>
+
+          {canBulkDownloadPdf && onBulkDownloadPdf && (
+            <button
+              onClick={onBulkDownloadPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                bg-violet-600/20 hover:bg-violet-500/30 text-violet-300 border border-violet-500/30 hover:border-violet-500/50
+                transition-all duration-200 active:scale-95"
+            >
+              <FileDown size={12} />
+              Bulk .pdf
+            </button>
+          )}
 
           <button
             onClick={onDownloadPdf}

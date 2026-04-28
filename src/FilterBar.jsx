@@ -15,8 +15,8 @@ import { Search, User, Calendar, X, Filter } from 'lucide-react';
  */
 export default function FilterBar({
   rows,
-  filterUser,
-  setFilterUser,
+  filterUsers,
+  setFilterUsers,
   filterDateFrom,
   filterDateTo,
   setFilterDateFrom,
@@ -35,7 +35,7 @@ export default function FilterBar({
     return Array.from(set).sort();
   }, [rows]);
 
-  const isActive = filterUser !== '' || filterDateFrom !== '' || filterDateTo !== '';
+  const isActive = filterUsers.length > 0 || filterDateFrom !== '' || filterDateTo !== '';
 
   return (
     <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4">
@@ -98,19 +98,22 @@ export default function FilterBar({
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"
             />
             <select
-              value={filterUser}
-              onChange={(e) => setFilterUser(e.target.value)}
+              multiple
+              value={filterUsers}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                setFilterUsers(selected);
+              }}
               className={`
                 w-full pl-8 pr-3 py-2.5 rounded-xl text-xs
                 bg-gray-800 border outline-none
                 transition-all duration-200 appearance-none cursor-pointer
-                ${filterUser
+                ${filterUsers.length > 0
                   ? 'border-violet-500/60 text-violet-200 bg-violet-500/5'
                   : 'border-gray-700 text-gray-300 hover:border-gray-600'
                 }
               `}
             >
-              <option value="">— Semua User —</option>
               {userOptions.map((u) => (
                 <option key={u} value={u}>{u}</option>
               ))}
@@ -189,13 +192,14 @@ export default function FilterBar({
       {isActive && (
         <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-800">
           <span className="text-[10px] text-gray-600">Filter aktif:</span>
-          {filterUser && (
+          {filterUsers.map((u) => (
             <Pill
-              label={`User: ${filterUser}`}
+              key={u}
+              label={`User: ${u}`}
               color="violet"
-              onRemove={() => setFilterUser('')}
+              onRemove={() => setFilterUsers(filterUsers.filter((x) => x !== u))}
             />
-          )}
+          ))}
           {filterDateFrom && (
             <Pill
               label={`Dari: ${formatDisplayDate(filterDateFrom)}`}

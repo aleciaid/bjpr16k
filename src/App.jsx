@@ -65,7 +65,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   // ── Filter state ───────────────────────────────────────────────────────────
-  const [filterUser,     setFilterUser]     = useState('');
+  const [filterUsers,    setFilterUsers]    = useState([]);
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo,   setFilterDateTo]   = useState('');
 
@@ -100,7 +100,7 @@ export default function App() {
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       // User filter: exact match on trimmed value
-      if (filterUser && String(row.user || '').trim() !== filterUser) return false;
+      if (filterUsers.length > 0 && !filterUsers.includes(String(row.user || '').trim())) return false;
 
       // Date filter: compare YYYYMMDD strings directly (lexicographic = chronologic)
       if (filterDateFrom || filterDateTo) {
@@ -118,7 +118,50 @@ export default function App() {
       }
       return true;
     });
-  }, [rows, filterUser, filterDateFrom, filterDateTo]);
+  }, [rows, filterUsers, filterDateFrom, filterDateTo]);
+
+  const savePdfFromText = useCallback((text, exportName) => {
+    if (!text) return;
+
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4'
+    });
+
+    doc.setFont('courier', 'normal');
+
+    const margin = 15;
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const lines = text.split('\n');
+
+    const maxLineLen = Math.max(...lines.filter(l => l !== '\f').map(l => l.length), 1);
+    const usableWidth = pageWidth - 2 * margin;
+    const fontSize = usableWidth / (maxLineLen * 0.6);
+    doc.setFontSize(fontSize);
+
+    const lineHeight = fontSize * 1.15;
+    let cursorY = margin;
+
+    lines.forEach(line => {
+      if (line === '\f') {
+        doc.addPage();
+        cursorY = margin;
+        return;
+      }
+
+      if (cursorY + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        cursorY = margin;
+      }
+      doc.text(line, margin, cursorY);
+      cursorY += lineHeight;
+    });
+
+    doc.save(exportName);
+  }, []);
 
   // ── Parse Excel ────────────────────────────────────────────────────────────
   // Use header:1 to get raw 2D array, then map EACH COLUMN BY INDEX.
@@ -182,6 +225,7 @@ export default function App() {
 
     // Override header dates with filter date range when set
     const mergedHeader = { ...headerInfo };
+    if (filterUsers.length === 1) mergedHeader.teller = filterUsers[0];
     if (filterDateFrom) {
       const [y, m, d] = filterDateFrom.split('-');
       mergedHeader.reportDate = `${d}-${m}-${y}`;
@@ -193,7 +237,34 @@ export default function App() {
 
     const text = buildReport(filteredRows, mergedHeader);
     setReportText(text);
-  }, [filteredRows, headerInfo, filterDateFrom, filterDateTo]);
+  }, [filteredRows, headerInfo, filterUsers, filterDateFrom, filterDateTo]);
+
+  // ── Build export file name from active filters ───────────────────────────
+  const buildExportName = useCallback((ext) => {
+    const parts = ['PR16K'];
+    const usersPart = filterUsers.length === 1
+      ? filterUsers[0]
+      : (filterUsers.length > 1 ? `MULTI${filterUsers.length}` : '');
+    if (usersPart) parts.push(String(usersPart).trim());
+    if (filterDateFrom) {
+      // YYYY-MM-DD → DDMMYY
+      const [y, m, d] = filterDateFrom.split('-');
+      parts.push(`${d}${m}${y.slice(2)}`);
+    }
+    return parts.length > 1
+      ? `${parts.join('-')}.${ext}`
+      : `${fileName.replace(/\.(xlsx|xls)$/i, '')}_report.${ext}`;
+  }, [filterUsers, filterDateFrom, fileName]);
+
+  const buildExportNameWithUser = useCallback((ext, user) => {
+    const parts = ['PR16K'];
+    if (user) parts.push(String(user).trim());
+    if (filterDateFrom) {
+      const [y, m, d] = filterDateFrom.split('-');
+      parts.push(`${d}${m}${y.slice(2)}`);
+    }
+    return `${parts.join('-')}.${ext}`;
+  }, [filterDateFrom]);
 
   // ── Download TXT ───────────────────────────────────────────────────────────
   const handleDownload = useCallback(() => {
@@ -205,71 +276,52 @@ export default function App() {
     a.download = buildExportName('txt');
     a.click();
     URL.revokeObjectURL(url);
-  }, [reportText, filterUser, filterDateFrom, fileName]);
+  }, [reportText, buildExportName]);
 
   // ── Download PDF ───────────────────────────────────────────────────────────
   const handleDownloadPdf = useCallback(() => {
     if (!reportText) return;
+    savePdfFromText(reportText, buildExportName('pdf'));
+  }, [reportText, buildExportName, savePdfFromText]);
 
-    // Use landscape orientation, unit pt, A4 size
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'pt',
-      format: 'a4'
+  const handleBulkDownloadPdf = useCallback(() => {
+    if (filterUsers.length === 0) return;
+
+    const dateFiltered = rows.filter((row) => {
+      if (filterDateFrom || filterDateTo) {
+        const rowYMD = String(Math.round(Number(row.tanggal) || 0)).replace(/\D/g, '');
+        if (rowYMD.length === 8) {
+          if (filterDateFrom) {
+            const fromYMD = filterDateFrom.replace(/-/g, '');
+            if (rowYMD < fromYMD) return false;
+          }
+          if (filterDateTo) {
+            const toYMD = filterDateTo.replace(/-/g, '');
+            if (rowYMD > toYMD) return false;
+          }
+        }
+      }
+      return true;
     });
 
-    // Set a monospace font to keep fixed-width alignment
-    doc.setFont('courier', 'normal');
+    filterUsers.forEach((u) => {
+      const userRows = dateFiltered.filter((row) => String(row.user || '').trim() === u);
+      if (userRows.length === 0) return;
 
-    const margin = 15;
-    const pageWidth  = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-
-    const lines = reportText.split('\n');
-
-    // Auto-calculate font size so the widest line fills the page width
-    const maxLineLen = Math.max(...lines.filter(l => l !== '\f').map(l => l.length), 1);
-    const usableWidth = pageWidth - 2 * margin;
-    // Courier char width ≈ 0.6 × fontSize
-    const fontSize = usableWidth / (maxLineLen * 0.6);
-    doc.setFontSize(fontSize);
-
-    const lineHeight = fontSize * 1.15;
-    let cursorY = margin;
-
-    lines.forEach(line => {
-      // Handle manual page break from form feed character
-      if (line === '\f') {
-        doc.addPage();
-        cursorY = margin;
-        return;
+      const mergedHeader = { ...headerInfo, teller: u };
+      if (filterDateFrom) {
+        const [y, m, d] = filterDateFrom.split('-');
+        mergedHeader.reportDate = `${d}-${m}-${y}`;
+      }
+      if (filterDateTo) {
+        const [y, m, d] = filterDateTo.split('-');
+        mergedHeader.sysDate = `${d}-${m}-${y}`;
       }
 
-      // Check if we need to add a new page
-      if (cursorY + lineHeight > pageHeight - margin) {
-        doc.addPage();
-        cursorY = margin;
-      }
-      doc.text(line, margin, cursorY);
-      cursorY += lineHeight;
+      const text = buildReport(userRows, mergedHeader);
+      savePdfFromText(text, buildExportNameWithUser('pdf', u));
     });
-
-    doc.save(buildExportName('pdf'));
-  }, [reportText, filterUser, filterDateFrom, fileName]);
-
-  // ── Build export file name from active filters ───────────────────────────
-  const buildExportName = useCallback((ext) => {
-    const parts = ['PR16K'];
-    if (filterUser) parts.push(filterUser.trim());
-    if (filterDateFrom) {
-      // YYYY-MM-DD → DDMMYY
-      const [y, m, d] = filterDateFrom.split('-');
-      parts.push(`${d}${m}${y.slice(2)}`);
-    }
-    return parts.length > 1
-      ? `${parts.join('-')}.${ext}`
-      : `${fileName.replace(/\.(xlsx|xls)$/i, '')}_report.${ext}`;
-  }, [filterUser, filterDateFrom, fileName]);
+  }, [rows, filterUsers, filterDateFrom, filterDateTo, headerInfo, buildExportNameWithUser, savePdfFromText]);
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const handleReset = () => {
@@ -277,13 +329,13 @@ export default function App() {
     setReportText('');
     setFileName('');
     setError('');
-    setFilterUser('');
+    setFilterUsers([]);
     setFilterDateFrom('');
     setFilterDateTo('');
   };
 
   const clearFilters = () => {
-    setFilterUser('');
+    setFilterUsers([]);
     setFilterDateFrom('');
     setFilterDateTo('');
     setReportText('');
@@ -480,8 +532,8 @@ export default function App() {
               {/* ── Filter Bar ─────────────────────────────────────────────── */}
               <FilterBar
                 rows={rows}
-                filterUser={filterUser}
-                setFilterUser={setFilterUser}
+                filterUsers={filterUsers}
+                setFilterUsers={setFilterUsers}
                 filterDateFrom={filterDateFrom}
                 filterDateTo={filterDateTo}
                 setFilterDateFrom={setFilterDateFrom}
@@ -521,6 +573,8 @@ export default function App() {
                 text={reportText} 
                 onDownloadTxt={handleDownload} 
                 onDownloadPdf={handleDownloadPdf}
+                onBulkDownloadPdf={handleBulkDownloadPdf}
+                canBulkDownloadPdf={filterUsers.length > 1}
               />
             </div>
           )}
