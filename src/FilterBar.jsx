@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, User, Calendar, X, Filter } from 'lucide-react';
 
 /**
@@ -26,6 +26,10 @@ export default function FilterBar({
   maxDate,   // 'YYYY-MM-DD' — latest tanggal in the loaded data
   onClear,
 }) {
+  const [userOpen, setUserOpen] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const userWrapRef = useRef(null);
+
   // Unique, sorted user list derived from the loaded rows
   const userOptions = useMemo(() => {
     const set = new Set();
@@ -34,6 +38,21 @@ export default function FilterBar({
     });
     return Array.from(set).sort();
   }, [rows]);
+
+  const visibleUserOptions = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return userOptions;
+    return userOptions.filter((u) => u.toLowerCase().includes(q));
+  }, [userOptions, userQuery]);
+
+  useEffect(() => {
+    const onDocMouseDown = (e) => {
+      if (!userWrapRef.current) return;
+      if (!userWrapRef.current.contains(e.target)) setUserOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, []);
 
   const isActive = filterUsers.length > 0 || filterDateFrom !== '' || filterDateTo !== '';
 
@@ -92,36 +111,104 @@ export default function FilterBar({
             <User size={10} className="text-violet-400" />
             Filter User / Teller
           </label>
-          <div className="relative">
-            <Search
-              size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"
-            />
-            <select
-              multiple
-              value={filterUsers}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                setFilterUsers(selected);
-              }}
-              className={`
-                w-full pl-8 pr-3 py-2.5 rounded-xl text-xs
-                bg-gray-800 border outline-none
-                transition-all duration-200 appearance-none cursor-pointer
-                ${filterUsers.length > 0
+          <div className="relative" ref={userWrapRef}>
+            <button
+              type="button"
+              onClick={() => setUserOpen((v) => !v)}
+              className={
+                `w-full px-3 py-2.5 rounded-xl text-xs text-left ` +
+                `bg-gray-800 border outline-none transition-all duration-200 ` +
+                (filterUsers.length > 0
                   ? 'border-violet-500/60 text-violet-200 bg-violet-500/5'
-                  : 'border-gray-700 text-gray-300 hover:border-gray-600'
-                }
-              `}
+                  : 'border-gray-700 text-gray-300 hover:border-gray-600')
+              }
             >
-              {userOptions.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-            {/* Custom chevron */}
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600">
-              ▾
-            </div>
+              <span className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 min-w-0">
+                  <Search size={13} className="text-gray-600 shrink-0" />
+                  <span className="truncate">
+                    {filterUsers.length === 0
+                      ? 'Pilih user...'
+                      : `${filterUsers.length} user dipilih`}
+                  </span>
+                </span>
+                <span className="text-gray-600 shrink-0">▾</span>
+              </span>
+            </button>
+
+            {userOpen && (
+              <div className="absolute z-20 mt-2 w-full rounded-xl border border-gray-800 bg-gray-950 shadow-xl">
+                <div className="p-2 border-b border-gray-800">
+                  <div className="relative">
+                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                    <input
+                      value={userQuery}
+                      onChange={(e) => setUserQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 rounded-lg text-xs bg-gray-900 border border-gray-800
+                        text-gray-200 outline-none focus:border-violet-500/60"
+                      placeholder="Cari user..."
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setFilterUsers(userOptions)}
+                      className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      Pilih semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterUsers([])}
+                      className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      Kosongkan
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-56 overflow-auto">
+                  {visibleUserOptions.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-gray-600">User tidak ditemukan</div>
+                  ) : (
+                    visibleUserOptions.map((u) => {
+                      const checked = filterUsers.includes(u);
+                      return (
+                        <label
+                          key={u}
+                          className="flex items-center justify-between gap-3 px-3 py-2 text-xs
+                            text-gray-300 hover:bg-gray-900 cursor-pointer"
+                        >
+                          <span className="truncate">{u}</span>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              if (checked) setFilterUsers(filterUsers.filter((x) => x !== u));
+                              else setFilterUsers([...filterUsers, u]);
+                            }}
+                            className="accent-violet-500"
+                          />
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="p-2 border-t border-gray-800 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-600">{filterUsers.length} dipilih</span>
+                  <button
+                    type="button"
+                    onClick={() => setUserOpen(false)}
+                    className="text-[11px] text-violet-300 hover:text-violet-200 transition-colors"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
