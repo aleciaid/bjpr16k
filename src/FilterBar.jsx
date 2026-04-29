@@ -45,6 +45,8 @@ export default function FilterBar({
     return userOptions.filter((u) => u.toLowerCase().includes(q));
   }, [userOptions, userQuery]);
 
+  const isSingleDate = filterDateFrom !== '' && filterDateFrom === filterDateTo;
+
   useEffect(() => {
     const onDocMouseDown = (e) => {
       if (!userWrapRef.current) return;
@@ -103,7 +105,7 @@ export default function FilterBar({
       </div>
 
       {/* Filter controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
         {/* ── Filter User ─────────────────────────────────────────── */}
         <div className="flex flex-col gap-1.5">
@@ -111,6 +113,25 @@ export default function FilterBar({
             <User size={10} className="text-violet-400" />
             Filter User / Teller
           </label>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-gray-600">{filterUsers.length} dipilih</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFilterUsers(userOptions)}
+                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterUsers([])}
+                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
           <div className="relative" ref={userWrapRef}>
             <button
               type="button"
@@ -212,6 +233,48 @@ export default function FilterBar({
           </div>
         </div>
 
+        {/* ── Filter Tanggal (Single Date) ─────────────────────────── */}
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
+            <Calendar size={10} className="text-blue-400" />
+            Tanggal (Single)
+          </label>
+          <div className="relative">
+            <input
+              type="date"
+              value={isSingleDate ? filterDateFrom : ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFilterDateFrom(v);
+                setFilterDateTo(v);
+              }}
+              min={minDate || undefined}
+              max={maxDate || undefined}
+              className={`
+                w-full px-3 py-2.5 rounded-xl text-xs
+                bg-gray-800 border outline-none
+                transition-all duration-200 cursor-pointer
+                ${isSingleDate
+                  ? 'border-blue-500/60 text-blue-200 bg-blue-500/5'
+                  : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                }
+              `}
+            />
+          </div>
+          {isSingleDate && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDateFrom('');
+                setFilterDateTo('');
+              }}
+              className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors text-left"
+            >
+              Hapus tanggal single
+            </button>
+          )}
+        </div>
+
         {/* ── Filter Tanggal Dari ──────────────────────────────────── */}
         <div className="flex flex-col gap-1.5">
           <label className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
@@ -287,14 +350,24 @@ export default function FilterBar({
               onRemove={() => setFilterUsers(filterUsers.filter((x) => x !== u))}
             />
           ))}
-          {filterDateFrom && (
+          {isSingleDate && (
+            <Pill
+              label={`Tanggal: ${formatDisplayDate(filterDateFrom)}`}
+              color="blue"
+              onRemove={() => {
+                setFilterDateFrom('');
+                setFilterDateTo('');
+              }}
+            />
+          )}
+          {!isSingleDate && filterDateFrom && (
             <Pill
               label={`Dari: ${formatDisplayDate(filterDateFrom)}`}
               color="blue"
               onRemove={() => setFilterDateFrom('')}
             />
           )}
-          {filterDateTo && (
+          {!isSingleDate && filterDateTo && (
             <Pill
               label={`Sampai: ${formatDisplayDate(filterDateTo)}`}
               color="blue"
